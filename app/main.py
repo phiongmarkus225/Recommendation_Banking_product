@@ -45,12 +45,17 @@ def load_data():
     for path in paths_to_try:
         if os.path.exists(path):
             try:
-                return pd.read_csv(path)
+                df_loaded = pd.read_csv(path)
+                if not df_loaded.empty:
+                    return df_loaded
             except:
                 pass
-    return pd.DataFrame()
+    raise RuntimeError("Dataset file not found or empty.")
 
-df = load_data()
+try:
+    df = load_data()
+except Exception:
+    df = pd.DataFrame()
 
 # Helper to generate deterministic missing fields based on customer_id
 def get_full_customer_data(row, cust_id):
