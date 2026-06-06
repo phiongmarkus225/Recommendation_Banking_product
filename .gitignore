@@ -19,10 +19,16 @@ data/processed/*.csv
 *.xlsx
 *.csv
 
-# Model files (abaikan bobot model besar)
+# Model files (abaikan bobot model besar, kecuali yang dipakai app)
 models/*.pkl
 models/*.joblib
 models/*.h5
+!models/best_multilabel_model.pkl
+!models/kmeans_customer_segments.pkl
+!models/kmeans_model_creditcardsubtypeunsupervised.pkl
+
+# Whitelist sampled dataset
+!data/processed/clean_customer_dataNEW_sampled.csv.gz
 
 # Local logs & databases
 *.log

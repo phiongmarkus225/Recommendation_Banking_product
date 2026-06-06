@@ -35,11 +35,20 @@ html,body,[class*="css"]{font-family:'Inter',sans-serif;}
 
 @st.cache_data
 def load_data():
-    csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "processed", "clean_customer_dataNEW.csv")
-    try:
-        return pd.read_csv(csv_path)
-    except:
-        return pd.DataFrame()
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    paths_to_try = [
+        os.path.join(base_path, "data", "processed", "clean_customer_dataNEW.csv"),
+        os.path.join(base_path, "data", "processed", "clean_customer_dataNEW.csv.gz"),
+        os.path.join(base_path, "data", "processed", "clean_customer_dataNEW_sampled.csv"),
+        os.path.join(base_path, "data", "processed", "clean_customer_dataNEW_sampled.csv.gz")
+    ]
+    for path in paths_to_try:
+        if os.path.exists(path):
+            try:
+                return pd.read_csv(path)
+            except:
+                pass
+    return pd.DataFrame()
 
 df = load_data()
 
