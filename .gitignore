@@ -1,0 +1,39 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Data files (abaikan file data besar)
+data/raw/*.csv
+data/raw/*.json
+data/processed/*.csv
+*.xlsx
+*.csv
+
+# Model files (abaikan bobot model besar)
+models/*.pkl
+models/*.joblib
+models/*.h5
+
+# Local logs & databases
+*.log
+error.log
+output.log
+api/database.db
+
+# Streamlit secrets (jika ada)
+.streamlit/secrets.toml
+
+# IDE configuration
+.vscode/
+.idea/
+.DS_Store
