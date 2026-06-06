@@ -4,6 +4,9 @@ import pandas as pd
 import os, sys
 import requests
 
+# Ensure root directory is in sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # API Configuration
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -82,6 +85,235 @@ def get_full_customer_data(row, cust_id):
         "spend_other": np.random.uniform(0.05, 0.2)
     }
 
+# Fallback helper functions for running models locally
+def local_recommend_new(payload: dict) -> dict:
+    from src.utils import get_banking_product_recommendations, get_loan_recommendation
+    
+    gender_num = 1 if payload.get("gender") == "Female" else 0
+    
+    cust = {
+        "age": int(payload["age"]),
+        "gender": gender_num,
+        "residence_country": payload["residence_country"],
+        "residence_index": "Y",
+        "channel_entrace": payload["channel_entrace"],
+        "activity_status": 1,
+        "household_gross_income": float(payload["household_gross_income"]),
+        "personal_income": float(payload["personal_income"]),
+        "credit_score": int(payload["credit_score"]),
+        "current_loan_amount": 0.0,
+        "number_of_children": int(payload["number_of_children"]),
+        "employment_status": int(payload["employment_status"]),
+        "customer_segment": payload["customer_segment"],
+        "first_join_date": str(pd.Timestamp.today().date()),
+        "tax_rate": "0",
+        "avg_balance": float(payload["personal_income"]) * 0.1,
+        "min_balance": 1000.0,
+        "max_balance": float(payload["personal_income"]) * 0.2,
+        "total_transactions": 5,
+        "active_months": 1,
+        "avg_monthly_transaction_count": 1.0,
+        "avg_income_days_per_month": 1.0,
+        "avg_expense_days_per_month": 2.0,
+        "avg_transactions_per_month": 1.0,
+        "monthly_transaction_std": 0.3,
+        "expense_amount_cv": 0.5,
+        "recency_days": 1,
+        "frequency_per_month": 1,
+        "monetary_per_month": float(payload["personal_income"]) / 12.0
+    }
+    
+    prods = get_banking_product_recommendations(cust)
+    loan = get_loan_recommendation(cust)
+    
+    return {
+        "products": prods,
+        "loan": loan
+    }
+
+def local_recommend_existing(payload: dict) -> dict:
+    from src.utils import (
+        get_banking_product_recommendations,
+        get_loan_recommendation,
+        get_rfm_features,
+        get_customer_segment,
+        get_credit_card_recommendation
+    )
+    
+    cust_id = int(payload["customer_id"])
+    if df.empty:
+        raise ValueError("Database nasabah kosong atau tidak termuat.")
+        
+    customer_row = df[df["customer_id"] == cust_id]
+    if customer_row.empty:
+        raise ValueError(f"Customer ID {cust_id} tidak ditemukan di database.")
+        
+    cust = get_full_customer_data(customer_row.iloc[0], cust_id)
+    
+    prods = get_banking_product_recommendations(cust)
+    loan = get_loan_recommendation(cust)
+    rfm = get_rfm_features(cust)
+    seg = get_customer_segment(rfm)
+    cc = get_credit_card_recommendation(cust, seg)
+    
+    return {
+        "customer_profile": {
+            "age": int(cust["age"]),
+            "gender": "Female" if cust["gender"] == 1 else "Male",
+            "personal_income": float(cust["personal_income"]),
+            "credit_score": int(cust["credit_score"]),
+            "activity_status": "Aktif" if cust["activity_status"] == 1 else "Tidak Aktif"
+        },
+        "products": prods,
+        "loan": loan,
+        "rfm": rfm,
+        "segment": seg,
+        "credit_card": cc
+    }
+
+def local_segment(payload: dict) -> dict:
+    from src.utils import get_customer_segment
+    
+    cust_id = int(payload["customer_id"])
+    if df.empty:
+        raise ValueError("Database nasabah kosong atau tidak termuat.")
+        
+    customer_row = df[df["customer_id"] == cust_id]
+    if customer_row.empty:
+        raise ValueError(f"Customer ID {cust_id} tidak ditemukan di database.")
+        
+    cust = get_full_customer_data(customer_row.iloc[0], cust_id)
+    
+    rfm_data = {
+        "recency": int(cust["recency_days"]),
+        "frequency": int(cust["frequency_per_month"]),
+        "monetary": float(cust["monetary_per_month"])
+    }
+    
+    seg = get_customer_segment(rfm_data)
+    
+    s_fuel = float(cust["spend_fuel"])
+    s_retail = float(cust["spend_retail"])
+    s_travel = float(cust["spend_travel"])
+    s_entertain = float(cust["spend_entertain"])
+    s_grocery = float(cust["spend_grocery"])
+    s_other = float(cust["spend_other"])
+    total_pct = s_fuel + s_retail + s_travel + s_entertain + s_grocery + s_other
+    if total_pct == 0:
+        total_pct = 1.0
+        
+    spending_patterns = {
+        "Bahan Bakar": round((s_fuel / total_pct) * 100, 2),
+        "Retail": round((s_retail / total_pct) * 100, 2),
+        "Travel": round((s_travel / total_pct) * 100, 2),
+        "Hiburan": round((s_entertain / total_pct) * 100, 2),
+        "Groceries": round((s_grocery / total_pct) * 100, 2),
+        "Lainnya": round((s_other / total_pct) * 100, 2)
+    }
+    
+    spend_map = {
+        "FUEL": s_fuel, "RETAIL": s_retail, "TRAVEL": s_travel,
+        "ENTERTAINMENT": s_entertain, "GROCERIES": s_grocery, "OTHER": s_other
+    }
+    dom = max(spend_map, key=spend_map.get)
+    cc_map = {
+        "FUEL": "Fuel Rewards Card", "RETAIL": "Shopping Rewards Card",
+        "TRAVEL": "Travel Miles Card", "ENTERTAINMENT": "Entertainment Plus Card",
+        "GROCERIES": "Everyday Cashback Card", "OTHER": "Standard Cashback Card"
+    }
+    cc_desc = {
+        "Fuel Rewards Card": "Cashback untuk BBM dan tol.",
+        "Shopping Rewards Card": "Reward untuk belanja retail dan fashion.",
+        "Travel Miles Card": "Miles untuk penerbangan dan hotel.",
+        "Entertainment Plus Card": "Cashback untuk makan, streaming, hiburan.",
+        "Everyday Cashback Card": "Cashback untuk belanja harian dan groceries.",
+        "Standard Cashback Card": "Cashback fleksibel untuk semua kategori."
+    }
+    cc_seg_bonus = {
+        "Cluster 1 - High-Value Loyalists": "Bonus limit tinggi dan reward premium.",
+        "Cluster 2 - Occasional Big-Spenders": "Cashback lebih tinggi untuk transaksi besar.",
+        "Cluster 3 - Regular Modest Customers": "Cicilan 0% dan reward poin harian."
+    }
+    
+    card_name = cc_map.get(dom, "Standard Cashback Card")
+    card_desc = cc_desc.get(card_name, "")
+    bonus = cc_seg_bonus.get(seg["name"], "")
+    affinity = spend_map[dom] / total_pct
+    
+    cc_rec = None
+    if int(cust["credit_score"]) >= 540:
+        cc_rec = {
+            "card_name": card_name,
+            "description": card_desc,
+            "bonus": bonus,
+            "spending_affinity": round(affinity * 100, 2),
+            "dominant_category": dom.title()
+        }
+        
+    return {
+        "segment_name": seg["name"],
+        "segment_description": seg["description"],
+        "segment_badge": seg["badge"],
+        "rfm": rfm_data,
+        "spending_patterns": spending_patterns,
+        "credit_card_recommendation": cc_rec,
+        "raw_spends": {
+            "fuel": s_fuel,
+            "retail": s_retail,
+            "travel": s_travel,
+            "entertain": s_entertain,
+            "grocery": s_grocery,
+            "other": s_other
+        },
+        "credit_score": int(cust["credit_score"])
+    }
+
+# Wrapper functions for UI calling
+def get_recommend_new(payload: dict) -> tuple[bool, dict, str]:
+    try:
+        res = requests.post(f"{API_URL}/api/recommend/new", json=payload, timeout=3.0)
+        if res.status_code == 200:
+            return True, res.json(), ""
+        else:
+            return False, {}, f"API Error: {res.text}"
+    except Exception as e:
+        try:
+            data = local_recommend_new(payload)
+            st.toast("💡 Backend API offline, menjalankan model secara lokal.", icon="ℹ️")
+            return True, data, ""
+        except Exception as local_err:
+            return False, {}, f"Local Fallback Error: {str(local_err)} (Original: {str(e)})"
+
+def get_recommend_existing(payload: dict) -> tuple[bool, dict, str]:
+    try:
+        res = requests.post(f"{API_URL}/api/recommend/existing", json=payload, timeout=3.0)
+        if res.status_code == 200:
+            return True, res.json(), ""
+        else:
+            return False, {}, f"API Error: {res.text}"
+    except Exception as e:
+        try:
+            data = local_recommend_existing(payload)
+            st.toast("💡 Backend API offline, menjalankan model secara lokal.", icon="ℹ️")
+            return True, data, ""
+        except Exception as local_err:
+            return False, {}, f"Local Fallback Error: {str(local_err)} (Original: {str(e)})"
+
+def get_segment(payload: dict) -> tuple[bool, dict, str]:
+    try:
+        res = requests.post(f"{API_URL}/api/segment", json=payload, timeout=3.0)
+        if res.status_code == 200:
+            return True, res.json(), ""
+        else:
+            return False, {}, f"API Error: {res.text}"
+    except Exception as e:
+        try:
+            data = local_segment(payload)
+            st.toast("💡 Backend API offline, menjalankan model secara lokal.", icon="ℹ️")
+            return True, data, ""
+        except Exception as local_err:
+            return False, {}, f"Local Fallback Error: {str(local_err)} (Original: {str(e)})"
+
 st.markdown("""<div class="hero"><h1>🏦 Banking Product <span>Recommendation</span> System</h1>
 <p>AI-powered pipeline: Profile → Feature Engineering → Model → Recommendation</p></div>""", unsafe_allow_html=True)
 
@@ -122,17 +354,10 @@ with tab1:
             "channel_entrace": n_channel
         }
         with st.spinner("Menganalisis profil nasabah baru..."):
-            try:
-                res = requests.post(f"{API_URL}/api/recommend/new", json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    prods = data["products"]
-                    loan = data["loan"]
-                    ok = True
-                else:
-                    ok = False; err = f"API Error: {res.text}"
-            except Exception as e:
-                ok = False; err = str(e)
+            ok, data, err = get_recommend_new(payload)
+            if ok:
+                prods = data["products"]
+                loan = data["loan"]
                 
         if not ok:
             st.error(f"Error: {err}")
@@ -172,30 +397,23 @@ with tab2:
 
         if e_submit:
             with st.spinner("Menjalankan pipeline rekomendasi..."):
-                try:
-                    payload = {"customer_id": int(e_cust_id)}
-                    res = requests.post(f"{API_URL}/api/recommend/existing", json=payload)
-                    if res.status_code == 200:
-                        data = res.json()
-                        cust_profile = data["customer_profile"]
-                        prods = data["products"]
-                        loan = data["loan"]
-                        rfm = data["rfm"]
-                        seg = data["segment"]
-                        cc = data["credit_card"]
-                        
-                        cust = {
-                            "age": cust_profile["age"],
-                            "personal_income": cust_profile["personal_income"],
-                            "credit_score": cust_profile["credit_score"],
-                            "activity_status": 1 if cust_profile["activity_status"] == "Aktif" else 0,
-                            "gender": 1 if cust_profile["gender"] == "Female" else 0
-                        }
-                        ok = True
-                    else:
-                        ok = False; err = f"API Error: {res.text}"
-                except Exception as e:
-                    ok = False; err = str(e)
+                payload = {"customer_id": int(e_cust_id)}
+                ok, data, err = get_recommend_existing(payload)
+                if ok:
+                    cust_profile = data["customer_profile"]
+                    prods = data["products"]
+                    loan = data["loan"]
+                    rfm = data["rfm"]
+                    seg = data["segment"]
+                    cc = data["credit_card"]
+                    
+                    cust = {
+                        "age": cust_profile["age"],
+                        "personal_income": cust_profile["personal_income"],
+                        "credit_score": cust_profile["credit_score"],
+                        "activity_status": 1 if cust_profile["activity_status"] == "Aktif" else 0,
+                        "gender": 1 if cust_profile["gender"] == "Female" else 0
+                    }
                     
             if not ok:
                 st.error(f"Error: {err}")
@@ -259,36 +477,29 @@ with tab3:
 
         if s_submit:
             with st.spinner("Menjalankan segmentasi..."):
-                try:
-                    payload = {"customer_id": int(s_cust_id)}
-                    res = requests.post(f"{API_URL}/api/segment", json=payload)
-                    if res.status_code == 200:
-                        data = res.json()
-                        rfm_data = data["rfm"]
-                        s_rec = rfm_data["recency"]
-                        s_freq = rfm_data["frequency"]
-                        s_mon = rfm_data["monetary"]
-                        
-                        spending_patterns = data["spending_patterns"]
-                        s_fuel = data["raw_spends"]["fuel"]
-                        s_retail = data["raw_spends"]["retail"]
-                        s_travel = data["raw_spends"]["travel"]
-                        s_entertain = data["raw_spends"]["entertain"]
-                        s_grocery = data["raw_spends"]["grocery"]
-                        s_other = data["raw_spends"]["other"]
-                        total_pct = s_fuel + s_retail + s_travel + s_entertain + s_grocery + s_other
-                        
-                        seg_name = data["segment_name"]
-                        seg_desc = data["segment_description"]
-                        seg_badge = data["segment_badge"]
-                        
-                        cc_rec = data["credit_card_recommendation"]
-                        credit_score = data["credit_score"]
-                        ok = True
-                    else:
-                        ok = False; err = f"API Error: {res.text}"
-                except Exception as e:
-                    ok = False; err = str(e)
+                payload = {"customer_id": int(s_cust_id)}
+                ok, data, err = get_segment(payload)
+                if ok:
+                    rfm_data = data["rfm"]
+                    s_rec = rfm_data["recency"]
+                    s_freq = rfm_data["frequency"]
+                    s_mon = rfm_data["monetary"]
+                    
+                    spending_patterns = data["spending_patterns"]
+                    s_fuel = data["raw_spends"]["fuel"]
+                    s_retail = data["raw_spends"]["retail"]
+                    s_travel = data["raw_spends"]["travel"]
+                    s_entertain = data["raw_spends"]["entertain"]
+                    s_grocery = data["raw_spends"]["grocery"]
+                    s_other = data["raw_spends"]["other"]
+                    total_pct = s_fuel + s_retail + s_travel + s_entertain + s_grocery + s_other
+                    
+                    seg_name = data["segment_name"]
+                    seg_desc = data["segment_description"]
+                    seg_badge = data["segment_badge"]
+                    
+                    cc_rec = data["credit_card_recommendation"]
+                    credit_score = data["credit_score"]
                     
             if not ok:
                 st.error(f"Error: {err}")
