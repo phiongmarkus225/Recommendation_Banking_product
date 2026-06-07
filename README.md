@@ -99,3 +99,6 @@ docker-compose up --build
 * **Optimalisasi Pendapatan Bunga (*Net Interest Margin*):** Penentuan suku bunga pinjaman dinamis berbasis risiko memastikan harga penawaran pinjaman kompetitif bagi nasabah berkualitas tinggi dan aman bagi bank.
 * **Meningkatkan Rasio Aktivasi Kartu (*Active Card Rate*):** Dengan mencocokkan subtipe kartu kredit dengan kategori pengeluaran riil terbesar nasabah (misal: kartu Grocery untuk pembelanja groceries bulanan), nasabah akan langsung menggunakan kartu kredit secara aktif.
 * **Mitigasi Rasio Kredit Macet (*NPL Mitigation*):** Profil risiko terintegrasi membantu mendeteksi kelayakan pinjaman nasabah secara instan sebelum penawaran diberikan.
+
+**LINK**
+STREAMLIT : https://recommendationbankingappuct-jbtk.streamlit.app/
