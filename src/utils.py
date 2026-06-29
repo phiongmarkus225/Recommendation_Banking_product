@@ -189,6 +189,15 @@ def preprocess_customer_input(customer: dict) -> pd.DataFrame:
     Build the feature vector used by the banking category model.
     The order must match the training data column order (exactly 22 features).
     """
+    from pandas.api.types import CategoricalDtype
+
+    # Exact categorical definitions from training set
+    residence_country_categories = ['AD', 'AE', 'AL', 'AO', 'AR', 'AT', 'AU', 'BA', 'BE', 'BG', 'BO', 'BR', 'BY', 'BZ', 'CA', 'CD', 'CF', 'CG', 'CH', 'CI', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CZ', 'DE', 'DJ', 'DK', 'DO', 'DZ', 'EC', 'EE', 'EG', 'ES', 'ET', 'FI', 'FR', 'GA', 'GB', 'GE', 'GH', 'GI', 'GM', 'GN', 'GQ', 'GR', 'GT', 'GW', 'HK', 'HN', 'HR', 'HU', 'IE', 'IL', 'IN', 'IS', 'IT', 'JM', 'JP', 'KE', 'KH', 'KR', 'KW', 'KZ', 'LB', 'LT', 'LU', 'LV', 'LY', 'MA', 'MD', 'MK', 'ML', 'MM', 'MR', 'MX', 'MZ', 'NG', 'NI', 'NL', 'NO', 'NZ', 'OM', 'PA', 'PE', 'PH', 'PK', 'PL', 'PR', 'PT', 'PY', 'QA', 'RO', 'RS', 'RU', 'SA', 'SE', 'SG', 'SK', 'SL', 'SN', 'SV', 'TG', 'TH', 'TN', 'TR', 'TW', 'UA', 'US', 'UY', 'VE', 'VN', 'ZA', 'ZW']
+    residence_index_categories = ['N', 'Y']
+    channel_entrace_categories = ['004', '007', '013', '025', 'K00', 'KAA', 'KAB', 'KAC', 'KAD', 'KAE', 'KAF', 'KAG', 'KAH', 'KAI', 'KAJ', 'KAK', 'KAL', 'KAM', 'KAN', 'KAO', 'KAP', 'KAQ', 'KAR', 'KAS', 'KAT', 'KAU', 'KAV', 'KAW', 'KAY', 'KAZ', 'KBB', 'KBD', 'KBE', 'KBF', 'KBG', 'KBH', 'KBJ', 'KBL', 'KBM', 'KBN', 'KBO', 'KBP', 'KBQ', 'KBR', 'KBS', 'KBU', 'KBV', 'KBW', 'KBX', 'KBY', 'KBZ', 'KCA', 'KCB', 'KCC', 'KCD', 'KCE', 'KCF', 'KCG', 'KCH', 'KCI', 'KCJ', 'KCK', 'KCL', 'KCM', 'KCN', 'KCO', 'KCP', 'KCQ', 'KCR', 'KCS', 'KCT', 'KCU', 'KCV', 'KCX', 'KDA', 'KDB', 'KDC', 'KDD', 'KDE', 'KDF', 'KDG', 'KDH', 'KDI', 'KDL', 'KDM', 'KDN', 'KDO', 'KDP', 'KDQ', 'KDR', 'KDS', 'KDT', 'KDU', 'KDV', 'KDW', 'KDX', 'KDY', 'KDZ', 'KEA', 'KEB', 'KEC', 'KED', 'KEE', 'KEF', 'KEG', 'KEH', 'KEI', 'KEJ', 'KEK', 'KEL', 'KEM', 'KEN', 'KEO', 'KEQ', 'KES', 'KEU', 'KEV', 'KEW', 'KEY', 'KEZ', 'KFA', 'KFB', 'KFC', 'KFD', 'KFE', 'KFF', 'KFG', 'KFH', 'KFI', 'KFJ', 'KFK', 'KFL', 'KFM', 'KFN', 'KFP', 'KFR', 'KFS', 'KFT', 'KFU', 'KFV', 'KGC', 'KGN', 'KGU', 'KGV', 'KGW', 'KGX', 'KGY', 'KHA', 'KHC', 'KHD', 'KHE', 'KHF', 'KHK', 'KHL', 'KHM', 'KHN', 'KHO', 'KHP', 'KHQ', 'RED']
+    customer_segment_model_categories = ['0-1 year', '2-4 years', 'More than 5 years']
+    tax_rate_categories = ['0%', '20%', '40%', '45%']
+
     sps    = _compute_sps(customer)
     tsi    = _compute_tsi(customer)
     
@@ -198,19 +207,57 @@ def preprocess_customer_input(customer: dict) -> pd.DataFrame:
     except Exception:
         membership_days = 720.0
 
+    # Clean & Map residence_country
+    country = str(customer.get("residence_country", "ES")).upper()
+    if country == "UK":
+        country = "GB"
+    if country not in residence_country_categories:
+        country = "ES"
+
+    # Clean & Map residence_index
+    res_idx = str(customer.get("residence_index", "Y")).upper()
+    if res_idx not in residence_index_categories:
+        res_idx = "Y"
+
+    # Clean & Map channel_entrace
+    channel = str(customer.get("channel_entrace", "KHD")).upper()
+    if channel not in channel_entrace_categories:
+        channel = "KHD"
+
+    # Clean & Map customer_segment_model
+    segment = customer.get("customer_segment_model", customer.get("customer_segment", "02 - PARTICULARES"))
+    segment_map = {
+        "01 - TOP": "More than 5 years",
+        "02 - PARTICULARES": "2-4 years",
+        "03 - UNIVERSITARIO": "0-1 year"
+    }
+    if segment in segment_map:
+        segment = segment_map[segment]
+    if segment not in customer_segment_model_categories:
+        segment = "0-1 year"
+
+    # Clean & Map tax_rate
+    tax = str(customer.get("tax_rate", "0%"))
+    if tax == "0":
+        tax = "0%"
+    elif not tax.endswith("%") and tax.isdigit():
+        tax = tax + "%"
+    if tax not in tax_rate_categories:
+        tax = "0%"
+
     data = {
-        "residence_country": customer.get("residence_country", "ES"),
+        "residence_country": country,
         "gender": int(customer.get("gender", 0)),
         "age": int(customer.get("age", 35)),
-        "residence_index": customer.get("residence_index", "Y"),
-        "channel_entrace": customer.get("channel_entrace", "KHD"),
+        "residence_index": res_idx,
+        "channel_entrace": channel,
         "activity_status": int(customer.get("activity_status", 1)),
         "household_gross_income": float(customer.get("household_gross_income", 30000.0)),
         "personal_income": float(customer.get("personal_income", 20000.0)),
         "number_of_children": int(customer.get("number_of_children", 0)),
         "employment_status": int(customer.get("employment_status", 1)),
-        "customer_segment_model": customer.get("customer_segment_model", customer.get("customer_segment", "02 - PARTICULARES")),
-        "tax_rate": str(customer.get("tax_rate", "0")),
+        "customer_segment_model": segment,
+        "tax_rate": tax,
         "avg_income_days_per_month": float(customer.get("avg_income_days_per_month", 2.0)),
         "income_amount_cv": float(customer.get("income_amount_cv", 0.8)),
         "avg_expense_days_per_month": float(customer.get("avg_expense_days_per_month", 3.0)),
@@ -224,9 +271,13 @@ def preprocess_customer_input(customer: dict) -> pd.DataFrame:
     }
 
     df = pd.DataFrame([data])
-    cat_cols = ['residence_country', 'residence_index', 'channel_entrace', 'customer_segment_model', 'tax_rate']
-    for col in cat_cols:
-        df[col] = df[col].astype('category')
+    
+    # Cast using defined CategoricalDtypes to guarantee matching categories with training set
+    df['residence_country'] = df['residence_country'].astype(CategoricalDtype(categories=residence_country_categories, ordered=False))
+    df['residence_index'] = df['residence_index'].astype(CategoricalDtype(categories=residence_index_categories, ordered=False))
+    df['channel_entrace'] = df['channel_entrace'].astype(CategoricalDtype(categories=channel_entrace_categories, ordered=False))
+    df['customer_segment_model'] = df['customer_segment_model'].astype(CategoricalDtype(categories=customer_segment_model_categories, ordered=False))
+    df['tax_rate'] = df['tax_rate'].astype(CategoricalDtype(categories=tax_rate_categories, ordered=False))
 
     return df
 
